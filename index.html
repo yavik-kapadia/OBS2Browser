@@ -1,0 +1,56 @@
+<html>
+  <head>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <button onclick="connect()">Connect</button>
+  </body>
+
+  <script>
+    window.connect = () => {
+      document.body.innerHTML = "";
+      const url = `${window.location.protocol === "http:" ? "ws" : "wss"}://${
+        window.location.hostname
+      }:${window.location.port}/websocket`;
+      const ws = new WebSocket(url);
+
+      ws.onmessage = (msg) => {
+        const pc = new RTCPeerConnection();
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate === null) {
+            ws.send(pc.currentLocalDescription.sdp);
+          }
+        };
+
+        let added = false;
+        pc.ontrack = function (event) {
+          if (added) {
+            return;
+          }
+          added = true;
+
+          const container = document.createElement("div");
+          container.className = "video-container";
+          const el = document.createElement("video");
+          el.srcObject = event.streams[0];
+          el.autoplay = true;
+          el.controls = true;
+
+          container.appendChild(el);
+          document.body.appendChild(container);
+
+          event.track.onmute = function (event) {
+            container.parentNode.removeChild(container);
+          };
+        };
+
+        pc.setRemoteDescription({ sdp: msg.data, type: "offer" });
+        pc.createAnswer().then((answer) => {
+          pc.setLocalDescription(answer);
+        });
+      };
+    };
+  </script>
+</html>

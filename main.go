@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"io"
 	"log"
@@ -11,60 +12,11 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+//go:embed index.html
+var content embed.FS
+
 func htmlHandler(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, `
-<html>
-<head>
-
-</head>
-
-<body>
-	<button onclick="connect()">Connect</button>
-</body>
-
-<script>
-	window.connect = () => {
-		document.body.innerHTML = ''
-		const url = `+"`"+`${window.location.protocol === 'http:' ? 'ws' : 'wss'}://${window.location.hostname}:${window.location.port}/websocket`+"`"+`
-		const ws = new WebSocket(url)
-
-		ws.onmessage = msg => {
-			const pc = new RTCPeerConnection()
-
-			pc.onicecandidate = event => {
-				if (event.candidate === null) {
-					ws.send(pc.currentLocalDescription.sdp)
-				}
-			}
-
-			let added = false
-			pc.ontrack = function (event) {
-				if (added) {
-					return
-				}
-				added = true
-
-				const el = document.createElement('video')
-				el.srcObject = event.streams[0]
-				el.autoplay = true
-				el.controls = true
-
-				document.body.appendChild(el)
-		  		event.track.onmute = function(event) {
-		  		  el.parentNode.removeChild(el)
-		  		}
-			}
-
-			pc.setRemoteDescription({sdp: msg.data, type: 'offer'})
-			pc.createAnswer().then(answer => {
-				pc.setLocalDescription(answer)
-			})
-		}
-	}
-</script>
-
-</html>
-`)
+	http.ServeFileFS(w, req, content, "index.html")
 }
 
 var (
@@ -118,6 +70,9 @@ func websocketHandler(ws *websocket.Conn) {
 func main() {
 	currentWebsocket.Store(nilWs)
 	answerChan = make(chan string)
+
+	fs := http.FileServer(http.Dir("."))
+	http.Handle("/styles.css", fs)
 
 	http.HandleFunc("/", htmlHandler)
 	http.HandleFunc("/whip", whipHandler)
